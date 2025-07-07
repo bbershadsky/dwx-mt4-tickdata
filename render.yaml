@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: dwx-tick-data-server
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start.py
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: SYMBOLS
+        value: EURUSDi,GBPUSDi,USDCHFi,USDJPYi,AUDUSDi,USDCADi
+      - key: TIMEFRAMES
+        value: M15
+      - key: WEBSOCKET_ASYNC_MODE
+        value: gevent
+      - key: MAX_TICK_HISTORY
+        value: 500
+      - key: MAX_BAR_HISTORY
+        value: 50
+    healthCheckPath: /health
+    autoDeploy: true
+    rootDir: .
+    repo: https://github.com/yourusername/dwx-web-server.git
+    branch: main 

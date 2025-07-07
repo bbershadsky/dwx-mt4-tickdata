@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DWX Tick Data Monitor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #ffffff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 300;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.8;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: #ff4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #44ff44;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+        }
+
+        .data-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .section-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .tick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .tick-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tick-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .tick-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #00ff88, #00ccff);
+        }
+
+        .symbol {
+            font-size: 1.3em;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #00ff88;
+        }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .price-label {
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        .price-value {
+            font-size: 1.2em;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .bid-price {
+            color: #ff6b6b;
+        }
+
+        .ask-price {
+            color: #4ecdc4;
+        }
+
+        .spread {
+            color: #ffa726;
+        }
+
+        .timestamp {
+            font-size: 0.8em;
+            opacity: 0.6;
+            margin-top: 15px;
+            text-align: right;
+        }
+
+        .flash {
+            animation: flash 0.5s ease-in-out;
+        }
+
+        @keyframes flash {
+            0% {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            50% {
+                background: rgba(0, 255, 136, 0.2);
+            }
+
+            100% {
+                background: rgba(255, 255, 255, 0.05);
+            }
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #00ff88;
+            text-align: center;
+        }
+
+        .tick-chart-container {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tick-chart-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #00ff88;
+        }
+
+        .tick-price-display {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+        }
+
+        .bid-color {
+            color: #ff6b6b;
+        }
+
+        .ask-color {
+            color: #4ecdc4;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            opacity: 0.7;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 25px;
+            text-align: center;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #00ff88;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.7;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+
+        .plotly-chart {
+            width: 100%;
+            height: 400px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .tick-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .grid-container {
+                grid-template-columns: 1fr;
+            }
+
+            .tick-chart-title {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>DWX Tick Data Monitor</h1>
+            <p class="subtitle">Real-time MetaTrader 4 Data Stream</p>
+            <div class="status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </header>
+
+        <div class="controls">
+            <button class="btn active" id="tickBtn" onclick="showSection('tick')">Live Ticks</button>
+            <button class="btn" id="chartBtn" onclick="showSection('chart')">Tick Charts</button>
+            <button class="btn" id="candlestickBtn" onclick="showSection('candlestick')">Candlestick Charts</button>
+            <button class="btn" id="statsBtn" onclick="showSection('stats')">Statistics</button>
+        </div>
+
+        <!-- Tick Data Section -->
+        <div id="tickSection" class="data-section">
+            <div class="section-title">
+                <span>📊</span>
+                <span>Live Tick Data</span>
+                <span style="margin-left: auto; font-size: 0.8em; opacity: 0.7;" id="tickCount">0 pairs</span>
+            </div>
+            <div class="tick-grid" id="tickGrid">
+                <div class="no-data">Waiting for tick data...</div>
+            </div>
+        </div>
+
+        <!-- Tick Charts Section -->
+        <div id="chartSection" class="data-section" style="display: none;">
+            <div class="section-title">
+                <span>📈</span>
+                <span>Real-time Tick Charts</span>
+            </div>
+            <div class="grid-container" id="tickChartsGrid">
+                <div class="no-data">Waiting for tick data...</div>
+            </div>
+        </div>
+
+        <!-- Candlestick Charts Section -->
+        <div id="candlestickSection" class="data-section" style="display: none;">
+            <div class="section-title">
+                <span>🕯️</span>
+                <span>Candlestick Charts</span>
+                <span style="margin-left: auto; font-size: 0.8em; opacity: 0.7;" id="barCount">0 bars</span>
+            </div>
+            <div class="grid-container" id="candlestickChartsGrid">
+                <div class="no-data">Waiting for bar data...</div>
+            </div>
+        </div>
+
+        <!-- Statistics Section -->
+        <div id="statsSection" class="data-section" style="display: none;">
+            <div class="section-title">
+                <span>📋</span>
+                <span>Statistics</span>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalTicks">0</div>
+                    <div class="stat-label">Total Ticks</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalBars">0</div>
+                    <div class="stat-label">Total Bars</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="activePairs">0</div>
+                    <div class="stat-label">Active Pairs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="uptime">00:00:00</div>
+                    <div class="stat-label">Uptime</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check if Plotly is loaded
+        if (typeof Plotly === 'undefined') {
+            console.error('Plotly.js failed to load! Charts will not work.');
+            alert('Plotly.js library failed to load. Please refresh the page.');
+        } else {
+            console.log('Plotly.js loaded successfully');
+        }
+
+        // WebSocket connection
+        const socket = io();
+
+        // Global variables
+        let tickData = {};
+        let barData = {};
+        let totalTicks = 0;
+        let totalBars = 0;
+        let startTime = new Date();
+        let currentSection = 'tick';
+
+        // Chart data storage
+        let tickHistory = {};
+        let tickCharts = {};
+        let candlestickCharts = {};
+
+        // Socket events
+        socket.on('connect', function () {
+            console.log('Connected to server');
+            document.getElementById('statusIndicator').classList.add('connected');
+            document.getElementById('statusText').textContent = 'Connected';
+
+            // Join rooms
+            socket.emit('join_ticks');
+            socket.emit('join_bars');
+
+            // Force update displays
+            setTimeout(function () {
+                updateTickDisplay();
+                updateTickCharts();
+                updateCandlestickCharts();
+            }, 1000);
+        });
+
+        socket.on('disconnect', function () {
+            console.log('Disconnected from server');
+            document.getElementById('statusIndicator').classList.remove('connected');
+            document.getElementById('statusText').textContent = 'Disconnected';
+        });
+
+        socket.on('connect_error', function (error) {
+            console.log('Connection error:', error);
+            document.getElementById('statusIndicator').classList.remove('connected');
+            document.getElementById('statusText').textContent = 'Connection Error';
+        });
+
+        socket.on('initial_tick_data', function (data) {
+            console.log('Received initial tick data:', data);
+            tickData = data;
+            updateTickDisplay();
+            updateTickCharts();
+        });
+
+        socket.on('initial_bar_data', function (data) {
+            console.log('Received initial bar data:', data);
+            barData = data;
+            updateCandlestickCharts();
+        });
+
+        socket.on('tick_data', function (data) {
+            console.log('Received tick data:', data);
+
+            tickData[data.symbol] = data;
+            totalTicks++;
+
+            // Store tick history for charts
+            if (!tickHistory[data.symbol]) {
+                tickHistory[data.symbol] = {
+                    bid: { x: [], y: [] },
+                    ask: { x: [], y: [] }
+                };
+            }
+
+            const now = new Date();
+            tickHistory[data.symbol].bid.x.push(now);
+            tickHistory[data.symbol].bid.y.push(data.bid);
+            tickHistory[data.symbol].ask.x.push(now);
+            tickHistory[data.symbol].ask.y.push(data.ask);
+
+            // Keep only last 100 ticks for performance
+            if (tickHistory[data.symbol].bid.x.length > 100) {
+                tickHistory[data.symbol].bid.x = tickHistory[data.symbol].bid.x.slice(-100);
+                tickHistory[data.symbol].bid.y = tickHistory[data.symbol].bid.y.slice(-100);
+                tickHistory[data.symbol].ask.x = tickHistory[data.symbol].ask.x.slice(-100);
+                tickHistory[data.symbol].ask.y = tickHistory[data.symbol].ask.y.slice(-100);
+            }
+
+            updateTickDisplay();
+            updateTickCharts();
+            updateStats();
+
+            // Flash effect
+            const card = document.getElementById(`tick-${data.symbol}`);
+            if (card) {
+                card.classList.add('flash');
+                setTimeout(() => card.classList.remove('flash'), 500);
+            }
+        });
+
+        socket.on('bar_data', function (data) {
+            console.log('Received bar data:', data);
+
+            if (!barData[data.symbol]) {
+                barData[data.symbol] = {};
+            }
+            if (!barData[data.symbol][data.timeframe]) {
+                barData[data.symbol][data.timeframe] = [];
+            }
+
+            // Check if this bar already exists (prevent duplicates)
+            const existingIndex = barData[data.symbol][data.timeframe].findIndex(bar => bar.time === data.time);
+            if (existingIndex !== -1) {
+                // Update existing bar
+                barData[data.symbol][data.timeframe][existingIndex] = data;
+            } else {
+                // Add new bar
+                barData[data.symbol][data.timeframe].push(data);
+                totalBars++;
+            }
+
+            // Keep only last 50 bars for performance
+            if (barData[data.symbol][data.timeframe].length > 50) {
+                barData[data.symbol][data.timeframe] = barData[data.symbol][data.timeframe].slice(-50);
+            }
+
+            updateCandlestickCharts();
+            updateStats();
+        });
+
+        function updateTickDisplay() {
+            const tickGrid = document.getElementById('tickGrid');
+            const tickCount = document.getElementById('tickCount');
+
+            if (Object.keys(tickData).length === 0) {
+                tickGrid.innerHTML = '<div class="no-data">Waiting for tick data...</div>';
+                tickCount.textContent = '0 pairs';
+                return;
+            }
+
+            let html = '';
+            for (const symbol in tickData) {
+                const data = tickData[symbol];
+                html += `
+                    <div class="tick-card" id="tick-${symbol}">
+                        <div class="symbol">${symbol}</div>
+                        <div class="price-row">
+                            <span class="price-label">BID</span>
+                            <span class="price-value bid-price">${data.bid.toFixed(5)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span class="price-label">ASK</span>
+                            <span class="price-value ask-price">${data.ask.toFixed(5)}</span>
+                        </div>
+                        <div class="price-row">
+                            <span class="price-label">SPREAD</span>
+                            <span class="price-value spread">${data.spread.toFixed(5)}</span>
+                        </div>
+                        <div class="timestamp">${new Date(data.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                `;
+            }
+
+            tickGrid.innerHTML = html;
+            tickCount.textContent = `${Object.keys(tickData).length} pairs`;
+        }
+
+        function updateTickCharts() {
+            console.log('Updating tick charts...');
+            const tickChartsGrid = document.getElementById('tickChartsGrid');
+
+            if (Object.keys(tickHistory).length === 0) {
+                console.log('No tick history available');
+                tickChartsGrid.innerHTML = '<div class="no-data">Waiting for tick data...</div>';
+                return;
+            }
+
+            console.log('Tick history available for:', Object.keys(tickHistory).length, 'symbols');
+
+            let html = '';
+            for (const symbol in tickHistory) {
+                const chartId = `tick-chart-${symbol}`;
+                html += `
+                    <div class="tick-chart-container">
+                        <div class="tick-chart-title">
+                            <span>${symbol}</span>
+                            <span class="tick-price-display">
+                                <span class="bid-color">BID: ${tickData[symbol] ? tickData[symbol].bid.toFixed(5) : 'N/A'}</span>
+                                <span class="ask-color">ASK: ${tickData[symbol] ? tickData[symbol].ask.toFixed(5) : 'N/A'}</span>
+                            </span>
+                        </div>
+                        <div id="${chartId}" class="plotly-chart"></div>
+                    </div>
+                `;
+            }
+
+            tickChartsGrid.innerHTML = html;
+
+            // Create or update charts
+            for (const symbol in tickHistory) {
+                const chartId = `tick-chart-${symbol}`;
+                const chartElement = document.getElementById(chartId);
+
+                if (chartElement && tickHistory[symbol].bid.x.length > 0) {
+                    try {
+                        console.log(`Creating tick chart for ${symbol} with ${tickHistory[symbol].bid.x.length} points`);
+
+                        const trace1 = {
+                            x: tickHistory[symbol].bid.x,
+                            y: tickHistory[symbol].bid.y,
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            name: 'BID',
+                            line: { color: '#ff6b6b', width: 2 },
+                            marker: { size: 4 }
+                        };
+
+                        const trace2 = {
+                            x: tickHistory[symbol].ask.x,
+                            y: tickHistory[symbol].ask.y,
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            name: 'ASK',
+                            line: { color: '#4ecdc4', width: 2 },
+                            marker: { size: 4 }
+                        };
+
+                        const layout = {
+                            title: '',
+                            xaxis: {
+                                title: 'Time',
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                gridcolor: 'rgba(255, 255, 255, 0.1)',
+                                showgrid: true
+                            },
+                            yaxis: {
+                                title: 'Price',
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                gridcolor: 'rgba(255, 255, 255, 0.1)',
+                                showgrid: true
+                            },
+                            plot_bgcolor: 'rgba(0, 0, 0, 0)',
+                            paper_bgcolor: 'rgba(0, 0, 0, 0)',
+                            font: { color: 'rgba(255, 255, 255, 0.7)' },
+                            legend: {
+                                x: 0,
+                                y: 1,
+                                bgcolor: 'rgba(0, 0, 0, 0.3)',
+                                bordercolor: 'rgba(255, 255, 255, 0.2)',
+                                borderwidth: 1
+                            },
+                            margin: { l: 50, r: 50, t: 30, b: 50 }
+                        };
+
+                        const config = {
+                            responsive: true,
+                            displayModeBar: false
+                        };
+
+                        Plotly.newPlot(chartId, [trace1, trace2], layout, config);
+                        console.log(`Successfully created tick chart for ${symbol}`);
+                    } catch (error) {
+                        console.error(`Error creating tick chart for ${symbol}:`, error);
+                    }
+                }
+            }
+        }
+
+        function updateCandlestickCharts() {
+            console.log('Updating candlestick charts...');
+            const candlestickChartsGrid = document.getElementById('candlestickChartsGrid');
+            const barCount = document.getElementById('barCount');
+
+            if (Object.keys(barData).length === 0) {
+                console.log('No bar data available');
+                candlestickChartsGrid.innerHTML = '<div class="no-data">Waiting for bar data...</div>';
+                barCount.textContent = '0 bars';
+                return;
+            }
+
+            console.log('Bar data available:', Object.keys(barData).length, 'symbols');
+
+            let html = '';
+            let totalBarCount = 0;
+
+            for (const symbol in barData) {
+                for (const timeframe in barData[symbol]) {
+                    const bars = barData[symbol][timeframe];
+                    totalBarCount += bars.length;
+
+                    const chartId = `candlestick-chart-${symbol}-${timeframe}`;
+                    html += `
+                        <div class="chart-container">
+                            <div class="chart-title">${symbol} - ${timeframe}</div>
+                            <div id="${chartId}" class="plotly-chart"></div>
+                        </div>
+                    `;
+                }
+            }
+
+            candlestickChartsGrid.innerHTML = html;
+            barCount.textContent = `${totalBarCount} bars`;
+
+            // Create or update candlestick charts
+            for (const symbol in barData) {
+                for (const timeframe in barData[symbol]) {
+                    const chartId = `candlestick-chart-${symbol}-${timeframe}`;
+                    const chartElement = document.getElementById(chartId);
+
+                    if (chartElement && barData[symbol][timeframe].length > 0) {
+                        try {
+                            console.log(`Creating candlestick chart for ${symbol}-${timeframe} with ${barData[symbol][timeframe].length} bars`);
+
+                            const bars = barData[symbol][timeframe];
+
+                            const trace = {
+                                x: bars.map(bar => new Date(bar.time)),
+                                close: bars.map(bar => bar.close),
+                                high: bars.map(bar => bar.high),
+                                low: bars.map(bar => bar.low),
+                                open: bars.map(bar => bar.open),
+                                type: 'candlestick',
+                                increasing: { line: { color: '#00ff88' } },
+                                decreasing: { line: { color: '#ff6b6b' } },
+                                name: `${symbol} ${timeframe}`
+                            };
+
+                            const layout = {
+                                title: '',
+                                xaxis: {
+                                    title: 'Time',
+                                    color: 'rgba(255, 255, 255, 0.7)',
+                                    gridcolor: 'rgba(255, 255, 255, 0.1)',
+                                    showgrid: true,
+                                    rangeslider: { visible: false }
+                                },
+                                yaxis: {
+                                    title: 'Price',
+                                    color: 'rgba(255, 255, 255, 0.7)',
+                                    gridcolor: 'rgba(255, 255, 255, 0.1)',
+                                    showgrid: true
+                                },
+                                plot_bgcolor: 'rgba(0, 0, 0, 0)',
+                                paper_bgcolor: 'rgba(0, 0, 0, 0)',
+                                font: { color: 'rgba(255, 255, 255, 0.7)' },
+                                margin: { l: 50, r: 50, t: 30, b: 50 }
+                            };
+
+                            const config = {
+                                responsive: true,
+                                displayModeBar: false
+                            };
+
+                            Plotly.newPlot(chartId, [trace], layout, config);
+                            console.log(`Successfully created candlestick chart for ${symbol}-${timeframe}`);
+                        } catch (error) {
+                            console.error(`Error creating candlestick chart for ${symbol}-${timeframe}:`, error);
+                        }
+                    }
+                }
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('totalTicks').textContent = totalTicks.toLocaleString();
+            document.getElementById('totalBars').textContent = totalBars.toLocaleString();
+            document.getElementById('activePairs').textContent = Object.keys(tickData).length;
+
+            // Update uptime
+            const now = new Date();
+            const diff = now - startTime;
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            document.getElementById('uptime').textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function showSection(section) {
+            // Hide all sections
+            document.getElementById('tickSection').style.display = 'none';
+            document.getElementById('chartSection').style.display = 'none';
+            document.getElementById('candlestickSection').style.display = 'none';
+            document.getElementById('statsSection').style.display = 'none';
+
+            // Remove active class from all buttons
+            document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+
+            // Show selected section
+            document.getElementById(section + 'Section').style.display = 'block';
+            document.getElementById(section + 'Btn').classList.add('active');
+
+            currentSection = section;
+
+            // Update charts when switching to chart sections
+            if (section === 'chart') {
+                setTimeout(updateTickCharts, 100);
+            } else if (section === 'candlestick') {
+                setTimeout(updateCandlestickCharts, 100);
+            }
+        }
+
+        // Update stats every second
+        setInterval(updateStats, 1000);
+
+        // Initial display
+        updateStats();
+    </script>
+</body>
+
+</html>
