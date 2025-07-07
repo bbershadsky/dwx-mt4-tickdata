@@ -13,19 +13,8 @@ from pathlib import Path
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'dwx_tick_data_secret'
 
-# Try to use gevent (Python 3.12+ compatible), fallback to threading if not available
-try:
-    import gevent
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
-    print("🔧 Using gevent for WebSocket support (Python 3.12+ compatible)")
-except ImportError:
-    try:
-        import eventlet
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
-        print("🔧 Using eventlet for WebSocket support")
-    except ImportError:
-        print("⚠️  Using threading mode (gevent/eventlet not available)")
-        socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Explicitly configure SocketIO for gevent
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
 
 # Global variables for storing tick data
 tick_data_cache = {}
@@ -251,12 +240,10 @@ def get_streamer():
     return streamer
 
 if __name__ == '__main__':
-    # Create directories
-    create_templates_dir()
-    create_static_dir()
+    # Get port from environment or default to 5000
+    port = int(os.getenv('PORT', 5000))
     
-    print("Starting DWX Tick Data Web Server...")
-    print("Access the web interface at: http://localhost:5000")
+    print(f"🚀 Starting DWX Tick Data Web Server on port {port}...")
     
-    # Run the Flask app with SocketIO
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True) 
+    # Use SocketIO's web server which is integrated with gevent
+    socketio.run(app, host='0.0.0.0', port=port, debug=False) 
