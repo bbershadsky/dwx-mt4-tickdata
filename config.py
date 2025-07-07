@@ -15,55 +15,62 @@ from pathlib import Path
 # =============================================================================
 
 class Config:
-    # Web Server Settings
-    HOST = os.getenv('HOST', '0.0.0.0')  # Changed to 0.0.0.0 for deployment
-    PORT = int(os.getenv('PORT', 5000))   # Use PORT env var for deployment
-    DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+    """Base configuration class."""
+    # Default values, can be overridden by subclasses or environment variables
+    ENVIRONMENT = 'development'
+    DEBUG = True
+    HOST = '127.0.0.1'
+    PORT = 5001
+    LOG_LEVEL = 'INFO'
     
     # MT4 Connection Settings
-    MT4_DIRECTORY = os.getenv('MT4_DIRECTORY', '/Users/bopr/Documents/pacific_config/CMC Markets MetaTrader 4')
+    MT4_DIRECTORY = '/Users/bopr/Documents/pacific_config/CMC Markets MetaTrader 4'
     
-    # DWX Connect Settings
-    SYMBOLS = os.getenv('SYMBOLS', 'EURUSDi,GBPUSDi,USDCHFi,USDJPYi,AUDUSDi,USDCADi').split(',')
-    TIMEFRAMES = os.getenv('TIMEFRAMES', 'M1,M5,M15,M30,H1,H4,D1').split(',')
+    # DWX Connect Settings - comma-separated strings
+    SYMBOLS = 'EURUSDi,GBPUSDi,USDCHFi,USDJPYi,AUDUSDi,USDCADi'
+    TIMEFRAMES = 'M1,M5,M15,H1,H4'
     
-    # Update frequencies (in seconds)
-    TICK_UPDATE_INTERVAL = float(os.getenv('TICK_UPDATE_INTERVAL', '0.1'))
-    BAR_UPDATE_INTERVAL = float(os.getenv('BAR_UPDATE_INTERVAL', '1.0'))
+    # Update frequencies
+    TICK_UPDATE_INTERVAL = 0.1
+    BAR_UPDATE_INTERVAL = 1.0
     
     # Data storage limits
-    MAX_TICK_HISTORY = int(os.getenv('MAX_TICK_HISTORY', '1000'))
-    MAX_BAR_HISTORY = int(os.getenv('MAX_BAR_HISTORY', '100'))
+    MAX_TICK_HISTORY = 1000
+    MAX_BAR_HISTORY = 100
     
     # WebSocket Settings
-    WEBSOCKET_ASYNC_MODE = os.getenv('WEBSOCKET_ASYNC_MODE', 'auto')  # auto, gevent, eventlet, threading
-    
-    # Deployment Settings
-    ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')  # development, production
-    
-    # Logging
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    WEBSOCKET_ASYNC_MODE = 'auto' # gevent, eventlet, threading
 
-# Deployment-specific configurations
-class ProductionConfig(Config):
-    DEBUG = False
-    ENVIRONMENT = 'production'
-    
 class DevelopmentConfig(Config):
-    DEBUG = True
-    ENVIRONMENT = 'development'
-    HOST = '127.0.0.1'  # Local development
+    """Configuration for local development."""
+    pass # Inherits all defaults from Config
 
-# Choose config based on environment
+class ProductionConfig(Config):
+    """Configuration for production environments like Render."""
+    ENVIRONMENT = 'production'
+    DEBUG = False
+    # Host must be 0.0.0.0 to be reachable in a container
+    HOST = '0.0.0.0' 
+    # Render provides the port to bind to
+    PORT = int(os.getenv('PORT', 10000))
+    LOG_LEVEL = 'INFO'
+    
+    # For production, we get these from environment variables
+    # The default values in render.yaml will be used if not overridden in the dashboard
+    SYMBOLS = os.getenv('SYMBOLS', Config.SYMBOLS)
+    TIMEFRAMES = os.getenv('TIMEFRAMES', Config.TIMEFRAMES)
+
 def get_config():
+    """
+    Returns the appropriate configuration object based on the ENVIRONMENT variable.
+    """
     env = os.getenv('ENVIRONMENT', 'development')
     if env == 'production':
+        print("✅ Loading Production Configuration")
         return ProductionConfig()
     else:
+        print("🔧 Loading Development Configuration")
         return DevelopmentConfig()
-
-# Default config instance
-config = get_config()
 
 # =============================================================================
 # Broker-specific Symbol Mappings
@@ -199,17 +206,17 @@ MAX_HISTORIC_REQUESTS = 3  # Limit historic requests to avoid overwhelming MT4
 # ====================================
 
 # WebSocket settings
-WEBSOCKET_PING_TIMEOUT = 60
-WEBSOCKET_PING_INTERVAL = 25
+WEBSOCKET_PING_TIMEOUT = config.WEBSOCKET_PING_TIMEOUT
+WEBSOCKET_PING_INTERVAL = config.WEBSOCKET_PING_INTERVAL
 
 # Buffer sizes
-TICK_BUFFER_SIZE = 1000
-BAR_BUFFER_SIZE = 500
+TICK_BUFFER_SIZE = config.TICK_BUFFER_SIZE
+BAR_BUFFER_SIZE = config.BAR_BUFFER_SIZE
 
 # Performance settings
-ENABLE_TICK_BATCHING = False  # Batch tick updates (reduces WebSocket traffic)
-TICK_BATCH_SIZE = 10  # Number of ticks to batch together
-TICK_BATCH_TIMEOUT = 0.1  # Maximum time to wait for batch completion (seconds)
+ENABLE_TICK_BATCHING = config.ENABLE_TICK_BATCHING
+TICK_BATCH_SIZE = config.TICK_BATCH_SIZE
+TICK_BATCH_TIMEOUT = config.TICK_BATCH_TIMEOUT
 
 # ====================================
 # HELPER FUNCTIONS
