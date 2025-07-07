@@ -27,5 +27,5 @@ services:
     healthCheckPath: /health
     autoDeploy: true
     rootDir: .
-    repo: https://github.com/yourusername/dwx-web-server.git
+    repo: https://github.com/bbershadsky/dwx-web-server.git
     branch: main 
