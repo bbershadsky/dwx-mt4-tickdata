@@ -30,4 +30,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
 # Run the application
-CMD ["python", "start_cloud.py"] 
+CMD gunicorn --workers 1 --worker-class gevent -t 360 --bind 0.0.0.0:$PORT web_server:app 
