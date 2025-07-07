@@ -2,4 +2,6 @@ flask==2.3.3
 flask-socketio==5.3.6
 python-socketio==5.8.0
 # For Python 3.12+ compatibility, we use gevent instead of eventlet
-gevent==23.9.1 
+gevent==23.9.1
+# For HTTP requests to cloud server
+requests==2.31.0 

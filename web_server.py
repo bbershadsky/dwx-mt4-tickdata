@@ -137,6 +137,66 @@ def health():
         'bar_data_count': len(bar_data_cache)
     }
 
+@app.route('/api/forward/tick', methods=['POST'])
+def receive_tick_data():
+    """API endpoint to receive tick data from local MT4 forwarder"""
+    try:
+        data = request.get_json()
+        if not data:
+            return {'error': 'No data provided'}, 400
+            
+        # Validate required fields
+        required_fields = ['symbol', 'bid', 'ask']
+        for field in required_fields:
+            if field not in data:
+                return {'error': f'Missing required field: {field}'}, 400
+        
+        # Use the streamer to emit the data
+        streamer.emit_tick(
+            symbol=data['symbol'],
+            bid=data['bid'],
+            ask=data['ask'],
+            timestamp=data.get('timestamp')
+        )
+        
+        return {'status': 'success', 'symbol': data['symbol']}, 200
+        
+    except Exception as e:
+        print(f"Error receiving tick data: {e}")
+        return {'error': str(e)}, 500
+
+@app.route('/api/forward/bar', methods=['POST'])
+def receive_bar_data():
+    """API endpoint to receive bar data from local MT4 forwarder"""
+    try:
+        data = request.get_json()
+        if not data:
+            return {'error': 'No data provided'}, 400
+            
+        # Validate required fields
+        required_fields = ['symbol', 'timeframe', 'time', 'open', 'high', 'low', 'close']
+        for field in required_fields:
+            if field not in data:
+                return {'error': f'Missing required field: {field}'}, 400
+        
+        # Use the streamer to emit the data
+        streamer.emit_bar(
+            symbol=data['symbol'],
+            timeframe=data['timeframe'],
+            time_bar=data['time'],
+            open_price=data['open'],
+            high=data['high'],
+            low=data['low'],
+            close_price=data['close'],
+            volume=data.get('volume', 0)
+        )
+        
+        return {'status': 'success', 'symbol': data['symbol'], 'timeframe': data['timeframe']}, 200
+        
+    except Exception as e:
+        print(f"Error receiving bar data: {e}")
+        return {'error': str(e)}, 500
+
 @socketio.on('connect')
 def handle_connect():
     print(f'Client connected: {request.sid}')
